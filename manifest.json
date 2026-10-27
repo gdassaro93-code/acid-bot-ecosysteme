@@ -1,0 +1,25 @@
+{
+  "fait_le": "2026-10-27 (version publique GitHub)",
+  "complet": false,
+  "note": "Colis public : aucun secret, aucun état, aucun modèle entraîné. Lis README.txt avant de lancer ACID_INSTALL.py.",
+  "source": {
+    "python": "3.12.10",
+    "python_exe": "",
+    "projet": "C:\\AcidBot\\BOT COMPLETO",
+    "utilisateur": "",
+    "terminal_guid": "",
+    "terminal_origin": "",
+    "terminal_exe": ""
+  },
+  "mode_trading": "SIMULATION",
+  "etats": [],
+  "a_refaire_a_la_main": [
+    "Python 3.12.10 64 bits : cocher « Add python.exe to PATH » ET garder « tcl/tk and IDLE » (tkinter ne s'installe pas par pip)",
+    "secrets/secrets_acid.exemple.py : le copier en secrets/secrets_acid.py et le remplir AVANT l'installation (README.txt, section 5)",
+    "MT5 : lancé une fois et connecté à TON compte (démo d'abord), puis refermé avant l'installation",
+    "MT5 : Outils > Options > Expert Advisors > autoriser WebRequest pour http://127.0.0.1:5001, http://127.0.0.1:8001 et http://127.0.0.1:8060",
+    "MT5 : bouton « Algo Trading » de la barre d'outils = VERT",
+    "MT5 : Observation du marché — afficher NAS100, BTCUSD, XAUUSD+, USDX, SP500, CL-OIL, EURUSD+, XAGUSD, USDJPY+, GBPUSD+, ETHUSD (noms Vantage)",
+    "Pare-feu Windows : autoriser python.exe / pythonw.exe en réseau privé"
+  ]
+}

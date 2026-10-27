@@ -1,0 +1,50 @@
+# =====================================================================
+#  ACID BOT — ce qui ne doit JAMAIS partir sur GitHub
+# =====================================================================
+
+# --- LE COFFRE : tes clés, ton compte MT5, tes mots de passe ---------
+#     (le modèle à remplir, secrets/secrets_acid.exemple.py, est publié)
+secrets_acid.py
+**/secrets_acid.py
+secrets/*
+!secrets/secrets_acid.exemple.py
+
+# --- La session Telegram : un accès COMPLET à ton compte Telegram ----
+*.session
+*.session-journal
+
+# --- Python ----------------------------------------------------------
+__pycache__/
+*.pyc
+*.avant_migration
+
+# --- Ce que l'écosystème produit en tournant -------------------------
+*.log
+*.jsonl
+*.flag
+*.bak*
+*.pkl
+*.csv
+*.csv.gz
+*.pdf
+acid_lecons*
+suivi_patron*
+visitors.json
+tunnel.log
+cloudflared.exe
+canaux_medias/
+mt5_charts_backup/
+mt5_files_introuvable/
+mt5_profils_introuvables/
+
+# états JSON du projet (aucun n'est livré : ils naissent au premier démarrage)
+projet/*.json
+projet/ml_data/*
+!projet/ml_data/.gitkeep
+projet/tableau/*
+!projet/tableau/.gitkeep
+
+# --- MetaTrader 5 ----------------------------------------------------
+*.ex5
+*.ex4
+*.lnk

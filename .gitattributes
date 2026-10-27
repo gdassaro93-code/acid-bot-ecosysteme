@@ -1,0 +1,6 @@
+# Écosystème Windows : le dépôt stocke les textes en LF, et chaque copie
+# récupérée (clone ou ZIP) reçoit des fins de ligne Windows (CRLF) —
+# indispensables aux .bat, confortables pour le Bloc-notes.
+* text=auto eol=crlf
+*.png binary
+*.ex5 binary

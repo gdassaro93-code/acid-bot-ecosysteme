@@ -1,0 +1,64 @@
+# =====================================================
+#  ÉCOSYSTÈME ACID BOT — paquets Python
+#  Établi le 08/09/2026 par scan AST des 45 fichiers .py du projet,
+#  versions relevées sur la machine d'origine (pip list --format=freeze).
+#
+#  Python 3.12.10 64 bits OBLIGATOIRE :
+#    · MetaTrader5 ne publie de roue que pour cp312
+#    · les modèles .pkl portent la marque scikit-learn 1.9.0 / numpy 2.4.6
+#      (numpy._core n'existe que depuis la série 2.x — un depickle sous 1.x
+#       échoue sur ModuleNotFoundError)
+#  À l'installation de Python, COCHER «…» ET
+#  «…» : tkinter ne s'installe pas par pip, et le Centre de
+#  contrôle comme ia_dialogue en dépendent.
+#
+#  Les versions sont ÉPINGLÉES exprès. Ne pas laisser pip résoudre librement.
+# =====================================================
+
+# --- NOYAU : sans ça rien ne démarre ---
+MetaTrader5==5.0.5735
+numpy==2.4.6
+pandas==3.0.3
+requests==2.34.2
+anthropic==0.117.0
+python-telegram-bot==22.8
+
+# --- SERVEURS : News 5001, ML 8001, dashboard 8050 ---
+Flask==3.1.3
+feedparser==6.0.12
+fastapi==0.139.2
+uvicorn==0.51.0
+pydantic==2.13.4
+
+# --- ML : versions EXACTES, les .pkl sont marqués sklearn 1.9.0 ---
+scikit-learn==1.9.0
+joblib==1.5.3
+
+# --- CANAUX DE SIGNAUX TELEGRAM ---
+Telethon==1.44.0
+
+# --- LECTURE DE DOCUMENTS ET DE VIDÉOS (imports tardifs) ---
+pypdf==6.14.2
+python-docx==1.2.0
+youtube-transcript-api==1.2.4
+
+# --- CENTRE DE CONTRÔLE : icône de la zone de notification ---
+pystray==0.19.5
+pillow==12.3.0
+
+# --- ÉCOUTE DES VOCAUX DES CANAUX (lourd : ~1,5 Go avec ses dépendances) ---
+# Si tu ne les installes pas, mets ECOUTER_MEDIAS = False dans
+# canaux_signaux.py:54 — sinon chaque vocal renverra du vide EN SILENCE
+# (l'import est protégé par un except qui retourne "").
+faster-whisper==1.2.1
+imageio-ffmpeg==0.6.0
+
+# --- OPTIONNEL : seulement pour regénérer ACID_BOT_Ecosysteme.pdf ---
+# Aucun .bat ne lance generer_pdf_doc.py. ~150 Mo. À n'installer qu'au besoin.
+# matplotlib==3.11.0
+# reportlab==5.0.0
+
+# --- NE PAS AJOUTER ---
+# aiohttp et xgboost sont importés par MISTRAL\server.py et MISTRAL\train_model.py,
+# mais ne sont PAS installés sur la machine d'origine : ce code est déjà mort,
+# aucun .bat ne le lance, et le acidgpt_xgb_model.pkl qu'il vise n'existe nulle part.

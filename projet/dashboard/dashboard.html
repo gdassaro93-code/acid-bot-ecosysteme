@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>⚡ ACID BOT — Live Dashboard</title>
+<!-- 📱 PWA : «…» sur iPhone = appli plein écran -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ACID">
+<meta name="theme-color" content="#0d1117">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="manifest" href="/manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<style>
+  :root {
+    --bg:#0d1117; --card:#161b22; --border:#21262d; --txt:#c9d1d9; --muted:#8b949e;
+    --green:#3fb950; --red:#f85149; --accent:#58a6ff; --gold:#d29922;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--txt); font:14px/1.5 'Segoe UI',system-ui,sans-serif; padding:14px; }
+  h1 { font-size:20px; letter-spacing:1px; }
+  h2 { font-size:13px; text-transform:uppercase; color:var(--muted); letter-spacing:1px; margin-bottom:10px; }
+  header { display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:14px; }
+  header .live { color:var(--red); font-weight:bold; animation:blink 1.6s infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  .chips { display:flex; gap:10px; flex-wrap:wrap; margin-left:auto; }
+  .chip { display:flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--border); border-radius:20px; padding:4px 12px; font-size:12px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:#555; flex:none; }
+  .dot.ok { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .dot.ko { background:var(--red);   box-shadow:0 0 6px var(--red); }
+  .grid { display:grid; gap:14px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  /* KPI */
+  #kpis { display:flex; flex-wrap:wrap; }
+  #kpis > .card { flex:1 1 130px; }
+  .kpi .lbl { font-size:11px; color:var(--muted); text-transform:uppercase; }
+  .kpi .val { font-size:20px; font-weight:600; margin-top:2px; }
+  /* status table */
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--border); }
+  td { padding:6px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  tr:last-child td { border-bottom:none; }
+  .pos { color:var(--green); } .neg { color:var(--red); }
+  /* layout rows — FLEX ajustable (fini le quadrillage rigide) :
+     chaque bloc a une largeur par défaut, modifiable via le ⚙ */
+  #row-top, #row-market, #row-bottom, #row-terms, #row-oeil { display:flex; flex-wrap:wrap; }
+  .card[data-card] { min-width:200px; }
+  /* les tableaux longs défilent dans leur cadre au lieu d'étirer la page */
+  [data-card="positions"] > div, [data-card="history"] > div { max-height:320px; overflow-y:auto; }
+  #row-top    > [data-card="status"]  { flex:1 1 23%; }
+  #row-top    > [data-card="equity"]  { flex:2 1 42%; }
+  /* row-bottom en GRILLE 2 colonnes (08/07) : une ligne flex ne sait pas
+     empiler 2 blocs — ici la colonne de gauche accepte « Que vois-tu ? »
+     PLUS « État des serveurs » l'un sous l'autre, l'equity reste à droite. */
+  #row-bottom { display:grid; grid-template-columns:minmax(280px, 31%) 1fr; align-items:start; }
+  #row-bottom > [data-card="vois"]   { grid-column:1; }
+  #row-bottom > [data-card="status"] { grid-column:1; }
+  #row-bottom > [data-card="equity"] { grid-column:2; grid-row:1 / span 2; }
+  @media (max-width:1100px) { #row-bottom { display:flex; flex-wrap:wrap; } }
+  #row-top    > [data-card="signals"] { flex:1.2 1 26%; }
+  #row-market > [data-card="symbols"] { flex:1 1 17%; }
+  #row-market > [data-card="chart"]   { flex:3 1 47%; }
+  #row-market > [data-card="ai"]      { flex:1.2 1 25%; }
+  #row-bottom > .card, #row-terms > .card, #row-oeil > .card { flex:1 1 46%; }
+  /* bloc infos ML */
+  #ml-info table td { border-bottom:none; padding:4px 8px; }
+  #ml-info .sub { color:var(--muted); font-size:12px; margin-top:6px; }
+  #btn-mlinfo { float:right; background:none; border:1px solid var(--border); color:var(--muted);
+                border-radius:6px; padding:2px 10px; cursor:pointer; font-size:12px; }
+  #btn-mlinfo:hover { color:var(--txt); border-color:var(--accent); }
+  @media (max-width:1100px) { #row-top > .card, #row-market > .card, #row-bottom > .card,
+    #row-terms > .card, #row-oeil > .card { flex:1 1 100% !important; } }
+  /* panneau de réglage des dimensions (⚙) */
+  .size-gear { position:absolute; top:6px; right:28px; color:var(--muted); cursor:pointer;
+               opacity:0; font-size:14px; user-select:none; z-index:5; transition:opacity .15s; }
+  .card:hover .size-gear { opacity:1; }
+  .size-gear:hover { color:var(--accent); }
+  .sizer { position:absolute; top:28px; right:8px; z-index:20; background:#1c2128;
+           border:1px solid var(--accent); border-radius:8px; padding:10px 12px;
+           font-size:12px; box-shadow:0 6px 18px rgba(0,0,0,.5); }
+  .sizer input[type=number] { background:var(--bg); border:1px solid var(--border);
+           color:var(--txt); border-radius:4px; padding:3px 5px; }
+  .sizer input[type=range] { width:110px; vertical-align:middle; }
+  .sizer button { background:var(--dark2,#21262d); border:1px solid var(--border);
+           color:var(--txt); border-radius:5px; padding:3px 9px; cursor:pointer; }
+  .sizer button:hover { border-color:var(--accent); }
+  /* signaux ML style telegram */
+  #ml-signals { font:12.5px/1.55 Consolas,monospace; max-height:460px; overflow-y:auto; white-space:pre-wrap; }  /* grande liste ML (07/07) */
+  #ml-signals .sig { margin-bottom:8px; }
+  #ml-signals .meta { color:var(--muted); }
+  /* écrans terminaux */
+  .term { background:#010409; border:1px solid var(--border); border-radius:6px; padding:8px 10px;
+          font:11px/1.55 Consolas,monospace; height:240px; overflow-y:auto; color:#9ece9e; }
+  .term .lerr { color:var(--red); } .term .lwarn { color:var(--gold); } .term .lok { color:var(--green); }
+  /* symbols */
+  #sym-search { width:100%; background:var(--bg); border:1px solid var(--border); color:var(--txt); border-radius:6px; padding:7px 10px; margin-bottom:8px; outline:none; }
+  #sym-list { overflow-y:auto; max-height:240px; }   /* liste symboles compacte (07/07) */
+  .sym { padding:6px 8px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px; }
+  .sym:hover { background:#1f2733; }
+  .sym.sel { background:#1c2f45; border:1px solid var(--accent); }
+  .sym small { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sym-link { cursor:pointer; }
+  .sym-link:hover { color:var(--accent) !important; text-decoration:underline; }
+  /* disposition modifiable (uniquement sur le PC local) */
+  .card { position:relative; }
+  .drag-handle { position:absolute; top:6px; right:8px; color:var(--muted); cursor:grab;
+                 opacity:0; font-size:15px; user-select:none; z-index:5; transition:opacity .15s; }
+  .card:hover .drag-handle { opacity:1; }
+  .drag-handle:hover { color:var(--accent); }
+  .card.dragging { opacity:.45; outline:2px dashed var(--accent); }
+  body.editable .card[data-card] { resize:vertical; overflow:auto; min-height:70px; }
+  /* chart + AI */
+  #tv { height:460px; border-radius:8px; overflow:hidden; }
+  #btn-ai { margin-top:10px; width:100%; background:linear-gradient(90deg,#238636,#2ea043); color:#fff; border:none; border-radius:8px; padding:11px; font-size:14px; font-weight:600; cursor:pointer; }
+  #btn-ai:disabled { opacity:.5; cursor:wait; }
+  #ai-panel { white-space:pre-wrap; font-size:13px; max-height:420px; overflow-y:auto; margin-top:10px; color:#d8dee6; }
+  #ai-panel .placeholder { color:var(--muted); font-style:italic; }
+  /* la courbe suit la hauteur de la carte : tu la redimensionnes, elle grandit */
+  #equity-wrap { height:calc(100% - 40px); min-height:200px; }
+  ::-webkit-scrollbar { width:8px; } ::-webkit-scrollbar-thumb { background:#30363d; border-radius:4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧪 ACID BOT</h1><span class="live">● LIVE</span>
+  <span id="account-line" style="color:var(--muted);font-size:12px"></span>
+  <div class="chips">
+    <span class="chip"><span class="dot" id="dot-ml"></span>ML</span>
+    <span class="chip"><span class="dot" id="dot-news"></span>News</span>
+    <span class="chip"><span class="dot" id="dot-telegram"></span>Telegram</span>
+    <span class="chip"><span class="dot" id="dot-mt5"></span>MT5</span>
+    <span class="chip" title="rouge = mis en pause par L'ŒIL ou manuellement"><span class="dot" id="dot-acid"></span>ACID IA</span>
+    <span class="chip" title="tokens IA consommés aujourd'hui (entrée + sortie, tous les bots)">🧮 <span id="chip-tokens">—</span></span>
+    <span class="chip" title="visiteurs uniques du dashboard aujourd'hui (et vues)">👥 <span id="chip-visiteurs">—</span></span>
+  </div>
+</header>
+
+<div class="grid" style="gap:14px">
+
+  <!-- KPIs -->
+  <div class="grid" id="kpis">
+    <div class="card kpi" data-card="kpi-balance"><div class="lbl">Balance</div><div class="val" id="k-balance">—</div></div>
+    <div class="card kpi" data-card="kpi-equity"><div class="lbl">Equity</div><div class="val" id="k-equity">—</div></div>
+    <div class="card kpi" data-card="kpi-floating"><div class="lbl">P&amp;L flottant</div><div class="val" id="k-floating">—</div></div>
+    <div class="card kpi" data-card="kpi-today"><div class="lbl">P&amp;L du jour</div><div class="val" id="k-today">—</div></div>
+    <div class="card kpi" data-card="kpi-trades"><div class="lbl">Trades du jour</div><div class="val" id="k-trades">—</div></div>
+    <div class="card kpi" data-card="kpi-winrate"><div class="lbl">Winrate</div><div class="val" id="k-winrate">—</div></div>
+    <div class="card kpi" data-card="kpi-pf"><div class="lbl">Profit factor</div><div class="val" id="k-pf">—</div></div>
+    <div class="card kpi" data-card="kpi-dd"><div class="lbl">Drawdown max</div><div class="val" id="k-dd">—</div></div>
+  </div>
+
+  <!-- statut serveurs + equity -->
+  <div class="grid" id="row-top">
+    <div class="card" data-card="status">
+      <h2>🚦 État des serveurs</h2>
+      <table id="status-table">
+        <tr><td><span class="dot" id="t-ml"></span></td><td>Serveur ML (8001)</td><td id="d-ml" style="color:var(--muted)">…</td></tr>
+        <tr><td><span class="dot" id="t-news"></span></td><td>Serveur News (5001)</td><td id="d-news" style="color:var(--muted)">…</td></tr>
+        <tr><td><span class="dot" id="t-telegram"></span></td><td>Bot Telegram</td><td id="d-telegram" style="color:var(--muted)">…</td></tr>
+        <tr><td><span class="dot" id="t-mt5"></span></td><td>MT5 / XM</td><td id="d-mt5" style="color:var(--muted)">…</td></tr>
+        <tr><td><span class="dot" id="t-acid"></span></td><td>EA ACID IA 📊</td><td id="d-acid" style="color:var(--muted)">…</td></tr>
+      </table>
+    </div>
+    <div class="card" data-card="equity">
+      <h2>📈 Courbe d'equity (90 jours)</h2>
+      <div id="equity-wrap"><canvas id="equity-chart"></canvas></div>
+    </div>
+    <div class="card" data-card="signals">
+      <h2>🤖 Signaux ML (vrais indicateurs MT5)</h2>
+      <div id="ml-signals"><span style="color:var(--muted);font-style:italic">calcul en cours…</span></div>
+    </div>
+  </div>
+
+  <!-- marché : symboles + tradingview + IA -->
+  <div class="grid" id="row-market">
+    <div class="card" data-card="symbols">
+      <h2>💱 Symboles XM (<span id="sym-count">0</span>)</h2>
+      <input id="sym-search" placeholder="Rechercher… (EURUSD, GOLD…)">
+      <div id="sym-list"></div>
+    </div>
+    <div class="card" data-card="chart">
+      <h2>📊 Graphique — <span id="chart-sym" style="color:var(--accent)">GOLD#</span></h2>
+      <div id="tv"></div>
+    </div>
+    <div class="card" data-card="ai">
+      <h2>🧠 Avis du trader IA</h2>
+      <button id="btn-ai">Demander l'avis de l'IA sur ce graphique</button>
+      <div id="ai-panel"><span class="placeholder">Sélectionnez un symbole puis cliquez sur le bouton : l'IA (celle du bot) analyse les données réelles MT5 + news + ML et donne son avis de trader confirmé.</span></div>
+    </div>
+  </div>
+
+  <!-- positions + historique -->
+  <div class="grid" id="row-bottom">
+    <div class="card" data-card="positions">
+      <h2>📌 Positions ouvertes</h2>
+      <div style="overflow-x:auto"><table id="tbl-positions">
+        <thead><tr><th>Heure</th><th>Symbole</th><th>Sens</th><th>Lots</th><th>Entrée</th><th>Actuel</th><th>SL</th><th>TP</th><th>P&amp;L</th></tr></thead>
+        <tbody><tr><td colspan="9" style="color:var(--muted)">aucune position</td></tr></tbody>
+      </table></div>
+    </div>
+    <div class="card" data-card="history">
+      <h2>🧾 Derniers trades clôturés</h2>
+      <div style="overflow-x:auto"><table id="tbl-history">
+        <thead><tr><th>Heure</th><th>Symbole</th><th>Sens</th><th>Lots</th><th>Prix</th><th>P&amp;L</th><th>Note</th></tr></thead>
+        <tbody><tr><td colspan="7" style="color:var(--muted)">—</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- écrans terminaux des serveurs -->
+  <div class="grid" id="row-terms">
+    <div class="card" data-card="term-bot">
+      <h2>🦣 Terminal Bot <small style="color:var(--muted)">(mammouth_v7.log)</small></h2>
+      <div class="term" id="term-bot">…</div>
+    </div>
+    <div class="card" data-card="term-ml">
+      <h2>🖥️ Terminal ML <small style="color:var(--muted)">(ml_server.log)</small></h2>
+      <div class="term" id="term-ml">…</div>
+    </div>
+    <div class="card" data-card="term-news">
+      <h2>📰 Terminal News <small style="color:var(--muted)">(acidgpt_server.log)</small></h2>
+      <div class="term" id="term-news">…</div>
+    </div>
+    <div class="card" data-card="mlinfo">
+      <h2>🧬 Infos ML <small style="color:var(--muted)">(mise à jour toutes les heures)</small>
+        <button id="btn-mlinfo" title="Actualiser maintenant">🔄</button></h2>
+      <div id="ml-info" style="max-height:240px;overflow-y:auto">…</div>
+    </div>
+  </div>
+
+  <!-- 🏦 Smart Money (COT) + 👁️ Que vois-tu -->
+  <div class="grid" id="row-oeil" style="gap:14px">
+    <div class="card" data-card="cot">
+      <h2>🏦 Smart Money — COT <small style="color:var(--muted)">(institutionnels · hebdo)</small></h2>
+      <div id="cot-panel" style="max-height:300px;overflow-y:auto">…</div>
+    </div>
+    <div class="card" data-card="vois">
+      <h2>👁️ Que vois-tu ? <small style="color:var(--muted)">(systèmes &amp; experts MT5)</small></h2>
+      <div id="vois-panel" style="max-height:300px;overflow-y:auto">…</div>
+    </div>
+  </div>
+
+  <!-- 🗨️ Chat de groupe : parler à tous les bots actifs -->
+  <div class="grid" id="row-chat" style="gap:14px">
+    <div class="card" data-card="council" style="flex:1 1 100%">
+      <h2>🗨️ Parler aux bots <small style="color:var(--muted)">(L'ŒIL + chaque IA de chart active répond)</small></h2>
+      <div id="council-log" style="height:260px;overflow-y:auto;font-size:13px;line-height:1.5;padding:4px 2px"></div>
+      <div style="position:relative;display:flex;gap:8px;margin-top:8px">
+        <div id="council-menu" style="display:none;position:absolute;bottom:48px;left:0;right:70px;background:#161b22;border:1px solid #30363d;border-radius:8px;max-height:180px;overflow-y:auto;z-index:20"></div>
+        <input id="council-input" autocomplete="off" placeholder="Message à tous — ou tape / pour viser UN bot"
+               style="flex:1;background:#010409;border:1px solid #21262d;border-radius:8px;color:var(--txt);padding:10px;font-size:14px">
+        <button id="council-send" style="background:#2ea043;color:#fff;border:0;border-radius:8px;padding:0 18px;font-weight:bold;cursor:pointer">Envoyer</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (v, cur) => v == null ? '—' : v.toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + (cur ? ' ' + cur : '');
+const hhmm = t => new Date(t * 1000).toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+let CUR = '', selectedSymbol = 'GOLD#';
+
+/* Si la page est ouverte en double-clic (file://), on vise le serveur local en absolu. */
+const API = location.protocol.startsWith('http') ? '' : 'http://127.0.0.1:8050';
+async function j(url, opt) {
+  const r = await fetch(API + url, opt);
+  return r.json();
+}
+
+/* ---------- statut ---------- */
+async function pollStatus() {
+  try {
+    const s = await j('/api/status');
+    for (const k of ['ml','news','telegram','mt5']) {
+      const ok = s[k] && s[k].ok;
+      $('dot-' + k).className = 'dot ' + (ok ? 'ok' : 'ko');
+      $('t-' + k).className   = 'dot ' + (ok ? 'ok' : 'ko');
+      $('d-' + k).textContent = (ok ? 'EN LIGNE — ' : 'HORS LIGNE — ') + (s[k].detail || '');
+    }
+    /* 🚦 voyant ACID IA : vert = actif, rouge = en pause (libellé dédié, pas «…») */
+    const acid = s.acid || s.sonnet;
+    if (acid) {
+      const ok = acid.ok;
+      $('dot-acid').className = 'dot ' + (ok ? 'ok' : 'ko');
+      $('t-acid').className   = 'dot ' + (ok ? 'ok' : 'ko');
+      $('d-acid').textContent = acid.detail || (ok ? 'actif' : 'en pause');
+    }
+  } catch (e) {
+    for (const k of ['ml','news','telegram','mt5','acid']) { $('dot-'+k).className = $('t-'+k).className = 'dot ko'; }
+  }
+}
+
+/* ---------- overview ---------- */
+let chart;
+function drawEquity(curve) {
+  const labels = curve.map(p => hhmm(p.t));
+  const data   = curve.map(p => p.v);
+  if (!chart) {
+    chart = new Chart($('equity-chart'), {
+      type: 'line',
+      data: { labels, datasets: [{ data, borderColor:'#3fb950', borderWidth:2, pointRadius:0, fill:true,
+        backgroundColor:'rgba(63,185,80,.08)', tension:.25 }] },
+      options: { responsive:true, maintainAspectRatio:false, animation:false,
+        plugins:{ legend:{display:false} },
+        scales:{ x:{ ticks:{ color:'#8b949e', maxTicksLimit:8 }, grid:{ color:'#21262d' } },
+                 y:{ ticks:{ color:'#8b949e' }, grid:{ color:'#21262d' } } } }
+    });
+  } else {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = data;
+    chart.update('none');
+  }
+}
+
+function pnlCell(v) { return `<td class="${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : ''}${fmt(v)}</td>`; }
+
+async function pollOverview() {
+  try {
+    const o = await j('/api/overview');
+    if (!o.ok) return;
+    CUR = o.account.currency;
+    $('account-line').textContent = `${o.account.server} · compte #${o.account.login} · ${CUR}`;
+    $('k-balance').textContent  = fmt(o.account.balance, CUR);
+    $('k-equity').textContent   = fmt(o.account.equity, CUR);
+    const f = o.account.floating;
+    $('k-floating').textContent = (f >= 0 ? '+' : '') + fmt(f, CUR);
+    $('k-floating').className   = 'val ' + (f >= 0 ? 'pos' : 'neg');
+    const tp = o.kpis.today_pnl;
+    $('k-today').textContent    = (tp >= 0 ? '+' : '') + fmt(tp, CUR);
+    $('k-today').className      = 'val ' + (tp >= 0 ? 'pos' : 'neg');
+    $('k-trades').textContent   = o.kpis.trades_today + ' / ' + o.kpis.trades_total;
+    $('k-winrate').textContent  = o.kpis.winrate + ' %';
+    $('k-pf').textContent       = o.kpis.profit_factor;
+    $('k-dd').textContent       = o.kpis.max_dd + ' %';
+    drawEquity(o.equity_curve);
+
+    const pb = $('tbl-positions').querySelector('tbody');
+    pb.innerHTML = o.positions.length ? o.positions.map(p =>
+      `<tr><td>${hhmm(p.t)}</td><td class="sym-link" data-s="${p.symbol}">${p.symbol}</td><td class="${p.dir==='BUY'?'pos':'neg'}">${p.dir}</td>
+       <td>${p.volume}</td><td>${p.open}</td><td>${p.current}</td><td>${p.sl||'—'}</td><td>${p.tp||'—'}</td>${pnlCell(p.profit)}</tr>`
+    ).join('') : '<tr><td colspan="9" style="color:var(--muted)">aucune position</td></tr>';
+
+    const hb = $('tbl-history').querySelector('tbody');
+    hb.innerHTML = o.history.length ? o.history.map(d =>
+      `<tr><td>${hhmm(d.t)}</td><td class="sym-link" data-s="${d.symbol}">${d.symbol}</td><td class="${d.dir==='BUY'?'pos':'neg'}">${d.dir}</td>
+       <td>${d.volume}</td><td>${d.price}</td>${pnlCell(d.profit)}<td style="color:var(--muted)">${d.comment||''}</td></tr>`
+    ).join('') : '<tr><td colspan="7" style="color:var(--muted)">—</td></tr>';
+  } catch (e) { /* serveur down : les voyants le montrent */ }
+}
+
+/* ---------- écrans terminaux ---------- */
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+function lineClass(l) {
+  if (/ERROR|CRITICAL|❌|Erreur/i.test(l)) return 'lerr';
+  if (/WARNING|⚠️|WARN/.test(l)) return 'lwarn';
+  if (/✅|démarré|Démarrage|OK !/.test(l)) return 'lok';
+  return '';
+}
+async function pollTerm(src) {
+  try {
+    const d = await j('/api/logs?src=' + src + '&n=120');
+    const box = $('term-' + src);
+    const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 50;
+    box.innerHTML = d.lines.map(l => `<div class="${lineClass(l)}">${esc(l)}</div>`).join('');
+    if (stick) box.scrollTop = box.scrollHeight;
+  } catch (e) {}
+}
+const pollTerms = () => ['bot','ml','news'].forEach(pollTerm);
+
+/* ---------- bloc infos ML (horaire) ---------- */
+async function pollMLInfo() {
+  try {
+    const d = await j('/api/mlinfo');
+    const box = $('ml-info');
+    const dot = d.online ? '🟢' : '🔴';
+    const modelTxt = d.model_loaded === true ? '✅ chargé (modele_v2.pkl — bougies Vantage)'
+                   : d.model_loaded === false ? '⚠️ mode fallback (pas de modèle)' : '—';
+    const trained = d.model_file_date ? new Date(d.model_file_date * 1000).toLocaleString('fr-FR') : 'inconnu';
+    let anaTxt = '<span style="color:var(--muted)">analyse indisponible</span>';
+    if (d.analysis) {
+      const a = d.analysis;
+      anaTxt = `${a.total} symboles · <span class="pos">${a.buy_count} BUY</span> · <span class="neg">${a.sell_count} SELL</span> · ${(a.hold_count||0) + (a.neutral_count||0)} HOLD`;
+    }
+    /* Signaux actifs avec TP : on privilégie les signaux calculés avec les vraies bougies MT5 */
+    const actifs = lastSignals.filter(s => !s.error && (s.direction === 'BUY' || s.direction === 'SELL'))
+      .map(s => `${s.direction === 'BUY' ? '🟢' : '🔴'} <span class="sym-link" data-s="${esc(s.symbol)}">${esc(s.symbol)}</span>: ${s.direction} — 🎯 TP: ${s.tp ?? '?'} (sûr à ${s.confidence}%)`);
+    if (actifs.length) anaTxt += `<br><span style="font-size:12px">${actifs.join('<br>')}</span>`;
+    else if (d.analysis) {
+      const fall = [...(d.analysis.buy_signals||[]).map(s => `🟢 ${s.symbol} (${Math.round((s.confidence<=1?s.confidence*100:s.confidence))}%)`),
+                    ...(d.analysis.sell_signals||[]).map(s => `🔴 ${s.symbol} (${Math.round((s.confidence<=1?s.confidence*100:s.confidence))}%)`)];
+      if (fall.length) anaTxt += `<br><span style="font-size:12px">${fall.join(' &nbsp; ')}</span>`;
+    }
+    box.innerHTML = `<table>
+      <tr><td>État serveur</td><td>${dot} ${d.online ? 'EN LIGNE' : 'HORS LIGNE'}${d.version ? ' · v' + esc(d.version) : ''}</td></tr>
+      <tr><td>Modèle ML</td><td>${modelTxt}</td></tr>
+      <tr><td>Dernier entraînement</td><td>${trained}</td></tr>
+      <tr><td>Actualisation modèle</td><td>📅 chaque dimanche (si serveur allumé)</td></tr>
+      <tr><td>Analyse globale</td><td>${anaTxt}</td></tr>
+      <tr><td>Symboles suivis</td><td style="color:var(--muted)">${(d.symbols||[]).join(', ') || '—'}</td></tr>
+    </table>
+    <div class="sub">Bloc mis à jour à ${new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'})} — prochaine actualisation dans 1 h (🔄 pour forcer)</div>`;
+  } catch (e) {
+    $('ml-info').innerHTML = '<span style="color:var(--muted)">serveur dashboard injoignable</span>';
+  }
+}
+$('btn-mlinfo').addEventListener('click', pollMLInfo);
+
+/* ---------- signaux ML style telegram ---------- */
+let lastSignals = [];
+async function pollSignals() {
+  try {
+    const d = await j('/api/mlsignals');
+    const box = $('ml-signals');
+    if (!d.ok) { box.innerHTML = `<span style="color:var(--muted)">⏳ ${esc(d.error || 'indisponible')}</span>`; return; }
+    const firstFill = lastSignals.length === 0 && d.signals.length > 0;
+    lastSignals = d.signals;
+    if (firstFill) pollMLInfo();   // met à jour le bloc Infos ML dès les premiers TP connus
+    box.innerHTML = d.signals.map(s => {
+      if (s.error) return `<div class="sig">⚪️ <b>${esc(s.symbol)}</b>: <span class="meta">${esc(s.error)}</span></div>`;
+      const ic  = s.direction === 'BUY' ? '🟢' : s.direction === 'SELL' ? '🔴' : '⚪️';
+      const cls = s.direction === 'BUY' ? 'pos' : s.direction === 'SELL' ? 'neg' : '';
+      const tp  = s.tp != null ? ` — 🎯 TP: ${s.tp} <span class="meta">(sûr à ${s.confidence}%)</span>` : '';
+      const sl  = s.sl != null ? ` | SL: ${s.sl}` : '';
+      return `<div class="sig">${ic} <b class="${cls} sym-link" data-s="${esc(s.symbol)}">${esc(s.symbol)}: ${esc(s.direction)}</b>${tp}\n` +
+             `   📊 Confiance: ${s.confidence}% | Score: ${s.score}${sl ? `\n   <span class="meta">🛡️ Prix: ${s.price}${sl}</span>` : ''}\n` +
+             `   <span class="meta">⚙️ RSI: ${s.rsi} | EMA: ${s.ema_ratio.toFixed(3)} | News: ${s.news}</span></div>`;
+    }).join('');
+  } catch (e) {}
+}
+
+/* ---------- symboles + tradingview ---------- */
+const TV_MAP = { GOLD:'XAUUSD', SILVER:'XAGUSD', OILCash:'USOIL', OIL:'USOIL', BRENT:'UKOIL', BRENTCash:'UKOIL',
+  US30Cash:'US30', US100Cash:'US100', US500Cash:'SPX500', GER40Cash:'GER40', UK100Cash:'UK100', JP225Cash:'JP225' };
+function tvSymbol(name) {
+  const n = name.replace('#','');
+  if (TV_MAP[n]) return TV_MAP[n];
+  return n.replace('Cash','').replace('_','');
+}
+function loadTV(symbol) {
+  $('chart-sym').textContent = symbol;
+  $('tv').innerHTML = '';
+  new TradingView.widget({ container_id:'tv', autosize:true, symbol:tvSymbol(symbol), interval:'15',
+    theme:'dark', style:'1', locale:'fr', timezone:'Europe/Paris', allow_symbol_change:true, hide_top_toolbar:false });
+}
+
+let SYMBOLS = [];
+function renderSymbols(filter) {
+  const f = (filter || '').toUpperCase();
+  const list = SYMBOLS.filter(s => !f || s.name.toUpperCase().includes(f) || (s.desc||'').toUpperCase().includes(f));
+  $('sym-list').innerHTML = list.slice(0, 400).map(s =>
+    `<div class="sym${s.name === selectedSymbol ? ' sel' : ''}" data-s="${s.name}">
+       <b>${s.name}</b><small>${s.desc || s.group || ''}</small></div>`).join('')
+    + (list.length > 400 ? `<div style="color:var(--muted);padding:6px">… ${list.length - 400} de plus, affinez la recherche</div>` : '');
+}
+async function loadSymbols() {
+  try {
+    const d = await j('/api/symbols');
+    SYMBOLS = d.symbols;
+    $('sym-count').textContent = d.count;
+    renderSymbols('');
+  } catch (e) {}
+}
+function selectSymbol(name, scrollToChart) {
+  if (!name) return;
+  selectedSymbol = name;
+  renderSymbols($('sym-search').value);
+  loadTV(selectedSymbol);
+  $('ai-panel').innerHTML = '<span class="placeholder">Cliquez sur le bouton pour l\'avis IA sur ' + selectedSymbol + '.</span>';
+  if (scrollToChart) $('tv').scrollIntoView({behavior:'smooth', block:'center'});
+}
+/* Un seul écouteur global : tout élément portant data-s est cliquable
+   (liste XM, signaux ML, infos ML, tableaux positions/trades). */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-s]');
+  if (!el) return;
+  selectSymbol(el.dataset.s, !el.classList.contains('sym'));
+});
+$('sym-search').addEventListener('input', e => renderSymbols(e.target.value));
+
+/* ---------- avis IA ---------- */
+$('btn-ai').addEventListener('click', async () => {
+  const btn = $('btn-ai'), panel = $('ai-panel');
+  btn.disabled = true;
+  btn.textContent = '🧠 Analyse de ' + selectedSymbol + ' en cours…';
+  panel.innerHTML = '<span class="placeholder">L\'IA lit les bougies MT5, les news et le signal ML…</span>';
+  try {
+    const r = await j('/api/ai/opinion', { method:'POST', headers:{'Content-Type':'application/json'},
+                                           body: JSON.stringify({symbol: selectedSymbol}) });
+    panel.textContent = r.ok ? r.opinion : ('⚠️ ' + (r.error || 'erreur inconnue'));
+  } catch (e) {
+    panel.textContent = '⚠️ Serveur dashboard injoignable : ' + e;
+  }
+  btn.disabled = false;
+  btn.textContent = "Demander l'avis de l'IA sur ce graphique";
+});
+
+/* ---------- disposition modifiable (poignée ✥ au survol, PC local) ---------- */
+const IS_OWNER = ['127.0.0.1', 'localhost', ''].includes(location.hostname);
+const CONTAINERS = ['kpis', 'row-top', 'row-market', 'row-bottom', 'row-terms', 'row-oeil'];
+let layoutTimer = null, draggedCard = null, lastLayoutJson = '';
+
+function saveLayout() {
+  if (!IS_OWNER) return;
+  clearTimeout(layoutTimer);
+  layoutTimer = setTimeout(() => {
+    const order = {}, heights = {}, widths = {};
+    CONTAINERS.forEach(c => {
+      order[c] = [...document.querySelectorAll('#' + c + ' > .card[data-card]')].map(el => el.dataset.card);
+    });
+    document.querySelectorAll('.card[data-card]').forEach(el => {
+      if (el.style.height) heights[el.dataset.card] = el.style.height;
+      if (el.dataset.w) widths[el.dataset.card] = el.dataset.w;
+    });
+    const body = JSON.stringify({order, heights, widths});
+    if (body === lastLayoutJson) return;
+    lastLayoutJson = body;
+    fetch(API + '/api/layout', { method: 'POST', headers: {'Content-Type': 'application/json'}, body }).catch(() => {});
+  }, 700);
+}
+
+function updateRowVisibility() {
+  // Une rangée vidée de ses cartes ne laisse plus d'espace fantôme
+  CONTAINERS.forEach(c => {
+    const el = $(c);
+    if (el) el.style.display = el.querySelector('.card') ? '' : 'none';
+  });
+}
+
+async function applyLayout() {
+  try {
+    const lay = await j('/api/layout');
+    if (lay.order) CONTAINERS.forEach(c => {
+      const cont = $(c);
+      if (!cont) return;
+      (lay.order[c] || []).forEach(id => {
+        const el = document.querySelector('.card[data-card="' + id + '"]');
+        if (el) cont.appendChild(el);
+      });
+    });
+    if (lay.heights) Object.entries(lay.heights).forEach(([id, h]) => {
+      const el = document.querySelector('.card[data-card="' + id + '"]');
+      if (el) el.style.height = h;
+    });
+    if (lay.widths) Object.entries(lay.widths).forEach(([id, w]) => {
+      const el = document.querySelector('.card[data-card="' + id + '"]');
+      if (el) { el.dataset.w = w; el.style.flex = '0 0 ' + w + '%'; }
+    });
+    lastLayoutJson = JSON.stringify({order: lay.order || {}, heights: lay.heights || {}, widths: lay.widths || {}});
+    updateRowVisibility();
+  } catch (e) {}
+}
+
+function closeSizer() { document.querySelectorAll('.sizer').forEach(x => x.remove()); }
+
+function openSizer(card) {
+  closeSizer();
+  const parentW = card.parentElement.getBoundingClientRect().width || 1;
+  const w = parseFloat(card.dataset.w) || Math.round(card.getBoundingClientRect().width / parentW * 100);
+  const h = parseInt(card.style.height) || Math.round(card.getBoundingClientRect().height);
+  const p = document.createElement('div');
+  p.className = 'sizer';
+  p.innerHTML = `<b style="color:var(--accent)">${card.dataset.card}</b><br><br>
+    Largeur <input id="sz-w" type="range" min="15" max="100" value="${w}">
+    <input id="sz-wn" type="number" min="15" max="100" value="${w}" style="width:52px"> %<br><br>
+    Hauteur <input id="sz-hn" type="number" min="80" max="1400" step="10" value="${h}" style="width:64px"> px
+    <div style="margin-top:8px;text-align:right">
+      <button id="sz-reset" title="Revenir à la taille automatique">↺ Auto</button>
+      <button id="sz-close">✔ OK</button></div>`;
+  card.appendChild(p);
+  const apply = () => {
+    const wv = Math.max(15, Math.min(100, parseFloat(p.querySelector('#sz-wn').value) || w));
+    const hv = Math.max(80, parseInt(p.querySelector('#sz-hn').value) || h);
+    card.dataset.w = wv;
+    card.style.flex = '0 0 ' + wv + '%';
+    card.style.height = hv + 'px';
+    saveLayout();
+  };
+  p.querySelector('#sz-w').addEventListener('input', e => { p.querySelector('#sz-wn').value = e.target.value; apply(); });
+  p.querySelector('#sz-wn').addEventListener('input', apply);
+  p.querySelector('#sz-hn').addEventListener('input', apply);
+  p.querySelector('#sz-reset').addEventListener('click', () => {
+    delete card.dataset.w;
+    card.style.flex = '';
+    card.style.height = '';
+    saveLayout();
+    closeSizer();
+  });
+  p.querySelector('#sz-close').addEventListener('click', closeSizer);
+}
+
+if (IS_OWNER) {
+  document.body.classList.add('editable');
+  document.querySelectorAll('.card[data-card]').forEach(card => {
+    const gear = document.createElement('div');
+    gear.className = 'size-gear';
+    gear.textContent = '⚙';
+    gear.title = 'Régler les dimensions (largeur % / hauteur px)';
+    card.appendChild(gear);
+    gear.addEventListener('click', e => { e.stopPropagation(); openSizer(card); });
+    const grip = document.createElement('div');
+    grip.className = 'drag-handle';
+    grip.textContent = '✥';
+    grip.title = 'Glisser pour déplacer ce cadre';
+    card.appendChild(grip);
+    grip.addEventListener('mousedown', () => card.draggable = true);
+    card.addEventListener('dragstart', () => { draggedCard = card; card.classList.add('dragging'); });
+    card.addEventListener('dragend',   () => { card.draggable = false; card.classList.remove('dragging'); saveLayout(); });
+    card.addEventListener('dragover',  e => e.preventDefault());
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!draggedCard || draggedCard === card) return;
+      const r = card.getBoundingClientRect();
+      const before = (e.clientX - r.left) < r.width / 2;
+      card.parentElement.insertBefore(draggedCard, before ? card : card.nextSibling);
+      saveLayout();
+      updateRowVisibility();
+    });
+  });
+  const ro = new ResizeObserver(() => saveLayout());
+  document.querySelectorAll('.card[data-card]').forEach(c => ro.observe(c));
+}
+
+/* ---------- 🏦 Smart Money (COT) ---------- */
+async function pollCOT() {
+  try {
+    const d = await j('/api/cot');
+    const box = $('cot-panel');
+    const a = d.assets || {};
+    const keys = Object.keys(a);
+    if (!keys.length) { box.innerHTML = '<span style="color:var(--muted)">COT indisponible (lance L\'ŒIL)</span>'; return; }
+    const date = a[keys[0]].date || '?';
+    box.innerHTML = `<div style="color:var(--muted);font-size:12px;margin-bottom:6px">Rapport CFTC du ${date} — position des gros spéculateurs</div>`
+      + keys.map(s => {
+        const x = a[s];
+        const ic = x.bias === 'HAUSSIER' ? '🟢' : x.bias === 'BAISSIER' ? '🔴' : '⚪';
+        const mom = x.weekly_change > 0 ? '↗️' : x.weekly_change < 0 ? '↘️' : '→';
+        const cls = x.bias === 'HAUSSIER' ? 'pos' : x.bias === 'BAISSIER' ? 'neg' : '';
+        return `<div style="padding:4px 0;border-bottom:1px solid var(--border)">${ic} <b class="${cls} sym-link" data-s="${s}">${s}</b> : ${x.bias} <span class="${cls}">(${x.net_pct>0?'+':''}${x.net_pct}%)</span> ${mom}
+          <span style="color:var(--muted);font-size:11px">net ${x.net>0?'+':''}${x.net} · sem ${x.weekly_change>0?'+':''}${x.weekly_change}</span></div>`;
+      }).join('')
+      + '<div style="color:var(--muted);font-size:11px;margin-top:6px">💡 Boussole de fond, pas signal d\'entrée.</div>';
+  } catch (e) {}
+}
+
+/* ---------- 👁️ Que vois-tu (systèmes) ---------- */
+async function pollVois() {
+  try {
+    const d = await j('/api/vois');
+    const box = $('vois-panel');
+    const dot = ok => `<span class="dot ${ok?'ok':'ko'}"></span>`;
+    let h = `<div style="padding:4px 0">${dot(d.python)} 🐍 Bot Python ${d.python?'actif':'silencieux'}</div>`;
+    h += `<div style="padding:4px 0">${dot(d.ml)} 🧠 Serveur ML &nbsp; ${dot(d.news)} 📰 Serveur News</div>`;
+    /* 🚨 CALL DU JOUR : affiché le jour même ; barré + «…» après 6 h */
+    if (d.call) {
+      const ic = d.call.direction === 'BUY' ? '🟢' : '🔴';
+      const st = d.call.frais ? '' : 'opacity:.55;text-decoration:line-through;';
+      h += `<div style="padding:6px 0;margin-top:6px;border-top:1px solid #21262d;${st}">
+        ${esc(d.call.titre || '🚨 CALL DU JOUR')} : ${ic} <b>${esc(d.call.symbol)} ${esc(d.call.direction)}</b>
+        ${Math.round(d.call.confidence)}%${d.call.tp ? ' · TP ' + esc(String(d.call.tp)) : ''}
+        <span style="color:var(--muted)">· il y a ${d.call.age_min} min${d.call.frais ? '' : ' · signal à revérifier'}</span></div>`;
+    }
+    const charts = d.charts || {};
+    const names = Object.keys(charts);
+    if (names.length) {
+      h += '<div style="color:var(--muted);font-size:12px;margin-top:8px">Experts / indicateurs sur MT5 :</div>';
+      h += names.map(n => `<div style="padding:3px 0;font-size:12.5px">🧩 <b>${n}</b> <span style="color:var(--muted)">${charts[n].join(', ')}</span></div>`).join('');
+    } else {
+      h += '<div style="color:var(--muted);margin-top:8px">Aucun expert détecté dans le journal du jour.</div>';
+    }
+    box.innerHTML = h;
+  } catch (e) {}
+}
+
+/* ---------- 🧮 tokens du jour + 👥 visiteurs (14/07) ---------- */
+async function pollCompteurs() {
+  try {
+    const c = await j('/api/compteurs');
+    const t = c.tokens || {};
+    const tot = (t.entree || 0) + (t.sortie || 0);
+    const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : n;
+    $('chip-tokens').textContent = fmt(tot) + (t.appels ? ' (' + t.appels + ' appels)' : '');
+    const v = c.visiteurs || {};
+    $('chip-visiteurs').textContent = (v.uniques || 0) + (v.vues ? ' / ' + v.vues + ' vues' : '');
+  } catch (e) {}
+}
+
+/* ---------- boot ---------- */
+applyLayout().finally(() => loadTV(selectedSymbol));
+loadSymbols();
+pollStatus(); pollOverview(); pollTerms(); pollSignals(); pollMLInfo(); pollCOT(); pollVois();
+pollCompteurs();
+setInterval(pollCompteurs, 60000);   // compteurs : toutes les minutes
+setInterval(pollStatus, 5000);
+setInterval(pollOverview, 5000);
+setInterval(pollTerms, 6000);
+setInterval(pollSignals, 20000);
+setInterval(pollMLInfo, 3600000);   // bloc infos ML : toutes les heures
+setInterval(pollCOT, 1800000);      // COT : toutes les 30 min (donnée hebdo)
+setInterval(pollVois, 15000);       // systèmes : toutes les 15 s
+
+/* 🗨️ Chat de groupe — parler à tous les bots actifs (économe : uniquement sur envoi) */
+const esc2 = s => (s || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function councilLine(html) {
+  const box = $('council-log');
+  box.insertAdjacentHTML('beforeend', html);
+  box.scrollTop = box.scrollHeight;
+}
+async function councilSend() {
+  const inp = $('council-input'), btn = $('council-send');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = '';
+  btn.disabled = true;
+  councilLine(`<div style="margin:6px 0"><b style="color:#58a6ff">🧑 Toi :</b> ${esc2(msg)}</div>`);
+  councilLine(`<div id="council-wait" style="color:var(--muted)">… les bots réfléchissent</div>`);
+  try {
+    const d = await j('/api/council?msg=' + encodeURIComponent(msg));
+    const w = $('council-wait'); if (w) w.remove();
+    const reps = (d && d.replies) || [];
+    if (!reps.length) councilLine('<div style="color:var(--muted)">(aucun bot branché ne répond)</div>');
+    for (const r of reps)
+      councilLine(`<div style="margin:4px 0"><b style="color:#f0883e">${esc2(r.name)} :</b> ${esc2(r.text)}</div>`);
+  } catch (e) {
+    const w = $('council-wait'); if (w) w.remove();
+    councilLine(`<div style="color:#f85149">❌ ${esc2(String(e))}</div>`);
+  }
+  btn.disabled = false;
+  inp.focus();
+}
+$('council-send').addEventListener('click', councilSend);
+$('council-input').addEventListener('keydown', e => {
+  const menu = $('council-menu');
+  if (e.key === 'Enter') { if (menu.style.display === 'block' && menu.dataset.first) { pickBot(menu.dataset.first); e.preventDefault(); } else councilSend(); }
+  if (e.key === 'Escape') menu.style.display = 'none';
+});
+
+/* 🎯 autocomplétion : tape "/" → menu des bots, clic = cible ce bot */
+let ROSTER = [];
+function pickBot(h) {
+  const inp = $('council-input');
+  inp.value = '/' + h + ' ';
+  $('council-menu').style.display = 'none';
+  inp.focus();
+}
+async function refreshRoster() {
+  try { const d = await j('/api/council?roster=1'); ROSTER = (d && d.bots) || []; } catch (e) {}
+}
+$('council-input').addEventListener('input', async () => {
+  const inp = $('council-input'), menu = $('council-menu');
+  const v = inp.value;
+  if (!v.startsWith('/') || v.indexOf(' ') > -1) { menu.style.display = 'none'; return; }
+  if (!ROSTER.length) await refreshRoster();
+  const q = v.slice(1).toLowerCase();
+  const hits = ROSTER.filter(b => b.handle.includes(q)).slice(0, 8);
+  if (!hits.length) { menu.style.display = 'none'; return; }
+  menu.dataset.first = hits[0].handle;
+  menu.innerHTML = hits.map(b =>
+    `<div onclick="pickBot('${b.handle}')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #21262d">
+       <b style="color:#f0883e">/${esc2(b.handle)}</b> <span style="color:var(--muted)">${esc2(b.name)}</span></div>`).join('');
+  menu.style.display = 'block';
+});
+refreshRoster();
+</script>
+</body>
+</html>
